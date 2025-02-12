@@ -1,0 +1,43 @@
+from pathlib import Path
+
+from secml.array import CArray
+
+from examples.utils import load_test_data
+from secml_malware.attack.blackbox.c_black_box_padding_evasion import CBlackBoxPaddingEvasionProblem
+from secml_malware.attack.blackbox.c_gamma_sections_evasion import CGammaSectionsEvasionProblem
+from secml_malware.attack.blackbox.c_wrapper_phi import CEnd2EndWrapperPhi, CEmberWrapperPhi
+from secml_malware.attack.blackbox.ga.c_nevergrad_ga import CNevergradGeneticAlgorithm
+from secml_malware.models import MalConv, CClassifierEnd2EndMalware, CClassifierEmber
+
+X, names = load_test_data()
+x = X[0, :]
+
+model = MalConv()
+secml_model = CClassifierEnd2EndMalware(model)
+secml_model.load_pretrained_model()
+wrapped_model = CEnd2EndWrapperPhi(secml_model)
+
+tree_path = Path(__file__).parent.parent / "secml_malware" / "data" / "trained" / "ember_model.txt"
+tree = CClassifierEmber(str(tree_path))
+wrapped_tree = CEmberWrapperPhi(tree)
+
+problem = CBlackBoxPaddingEvasionProblem(wrapped_model, population_size=3, how_many_padding_bytes=1024, iterations=3)
+engine = CNevergradGeneticAlgorithm(problem)
+results = engine.run(x, CArray([1]))
+print(results)
+
+problem = CBlackBoxPaddingEvasionProblem(wrapped_tree, population_size=3, how_many_padding_bytes=1024, iterations=3)
+engine = CNevergradGeneticAlgorithm(problem)
+results = engine.run(x, CArray([1]))
+print(results)
+
+goodware_folder = str(Path(__file__).parent.parent / "secml_malware" / "data" / "goodware_samples")
+sections, _ = CGammaSectionsEvasionProblem.create_section_population_from_folder(goodware_folder, how_many=3)
+problem = CGammaSectionsEvasionProblem(model_wrapper=wrapped_tree, section_population=sections,
+                                       population_size=3, penalty_regularizer=1e-2, iterations=3)
+engine = CNevergradGeneticAlgorithm(problem, random_state=12)
+results = engine.run(x, CArray([1]))
+print(results)
+engine = CNevergradGeneticAlgorithm(problem, random_state=12)
+results = engine.run(x, CArray([1]))
+print(results)
